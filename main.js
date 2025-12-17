@@ -8,6 +8,9 @@ class ParticleSystem {
         this.particleSystem = null;
         this.geometry = null;
         this.material = null;
+        this.domeMesh = null;
+        this.domeGeometry = null;
+        this.domeMaterial = null;
         
         // Hand tracking variables
         this.hands = null;
@@ -57,6 +60,9 @@ class ParticleSystem {
 
         // Create initial particles
         this.createParticles();
+        
+        // Create dome visualization
+        this.createDome();
 
         // Handle window resize
         window.addEventListener('resize', () => {
@@ -209,6 +215,54 @@ class ParticleSystem {
         }
     }
 
+    createDome() {
+        // Remove existing dome if it exists
+        if (this.domeMesh) {
+            this.scene.remove(this.domeMesh);
+            if (this.domeGeometry) this.domeGeometry.dispose();
+            if (this.domeMaterial) this.domeMaterial.dispose();
+        }
+
+        // Create dome geometry (adjust size based on current template)
+        let domeRadius = 5;
+        if (this.currentTemplate === 'heart' || this.currentTemplate === 'flower') {
+            domeRadius = 3;
+        } else if (this.currentTemplate === 'saturn') {
+            domeRadius = 4;
+        } else {
+            domeRadius = 3.5;
+        }
+        
+        this.domeGeometry = new THREE.SphereGeometry(domeRadius, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+        const domeVertices = this.domeGeometry.attributes.position.array;
+        
+        // Adjust vertices to make it a dome instead of a hemisphere
+        for (let i = 0; i < domeVertices.length; i += 3) {
+            // Modify the Z coordinate to make it more of a dome shape
+            if (domeVertices[i + 2] < 0) {
+                domeVertices[i + 2] = -domeVertices[i + 2] * 0.3; // Flatten the bottom
+            }
+        }
+        
+        // Update the geometry
+        this.domeGeometry.attributes.position.needsUpdate = true;
+        this.domeGeometry.computeVertexNormals();
+
+        // Create dome material
+        this.domeMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0xffffff,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.2,
+            side: THREE.DoubleSide
+        });
+
+        // Create dome mesh
+        this.domeMesh = new THREE.Mesh(this.domeGeometry, this.domeMaterial);
+        this.domeMesh.rotation.x = Math.PI; // Flip the dome to face upward
+        this.scene.add(this.domeMesh);
+    }
+
     updateParticles() {
         if (!this.particleSystem) return;
 
@@ -230,6 +284,11 @@ class ParticleSystem {
 
         // Mark the attribute as needing update
         this.geometry.attributes.position.needsUpdate = true;
+        
+        // Update dome scale as well
+        if (this.domeMesh) {
+            this.domeMesh.scale.set(this.scaleFactor, this.scaleFactor, this.scaleFactor);
+        }
     }
 
     setupEventListeners() {
@@ -237,6 +296,7 @@ class ParticleSystem {
         document.getElementById('templateSelect').addEventListener('change', (e) => {
             this.currentTemplate = e.target.value;
             this.createParticles();
+            this.createDome(); // Recreate dome to stay synchronized
         });
 
         // Color picker
@@ -268,6 +328,15 @@ class ParticleSystem {
         }
 
         this.geometry.attributes.color.needsUpdate = true;
+        
+        // Update dome color to match particle color
+        if (this.domeMaterial) {
+            // Convert THREE.Color to a similar brightness for the dome
+            const avgBrightness = (this.currentColor.r + this.currentColor.g + this.currentColor.b) / 3;
+            // Make dome color slightly brighter to be visible against particles
+            const domeColorValue = Math.min(1, avgBrightness * 1.5);
+            this.domeMaterial.color.setRGB(domeColorValue, domeColorValue, domeColorValue);
+        }
     }
 
     startHandTracking() {
